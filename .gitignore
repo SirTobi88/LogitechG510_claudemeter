@@ -1,0 +1,5 @@
+.venv/
+__pycache__/
+*.pyc
+# Separate clone of a third-party project (no open license) -- never commit
+Clawdmeter/
