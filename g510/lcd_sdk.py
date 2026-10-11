@@ -99,6 +99,8 @@ class LogitechLcd:
         self._dll.LogiLcdIsConnected.restype = ctypes.c_bool
         self._dll.LogiLcdMonoSetText.argtypes = [ctypes.c_int, ctypes.c_wchar_p]
         self._dll.LogiLcdMonoSetText.restype = ctypes.c_bool
+        self._dll.LogiLcdMonoSetBackground.argtypes = [ctypes.POINTER(ctypes.c_ubyte)]
+        self._dll.LogiLcdMonoSetBackground.restype = ctypes.c_bool
         self._dll.LogiLcdUpdate.argtypes = []
         self._dll.LogiLcdUpdate.restype = None
         self._dll.LogiLcdShutdown.argtypes = []
@@ -120,6 +122,17 @@ class LogitechLcd:
         for i in range(MONO_LINE_COUNT):
             text = lines[i][:MONO_LINE_WIDTH] if i < len(lines) else ""
             ok = bool(self._dll.LogiLcdMonoSetText(i, text)) and ok
+        self._dll.LogiLcdUpdate()
+        return ok
+
+    def set_bitmap(self, bitmap: bytes) -> bool:
+        """Show a full 160x43 bitmap (one byte per pixel, >128 = lit) with no
+        text on top, and push the update."""
+        size = LOGI_LCD_MONO_WIDTH * LOGI_LCD_MONO_HEIGHT
+        buf = (ctypes.c_ubyte * size).from_buffer_copy(bitmap[:size].ljust(size, b"\0"))
+        ok = bool(self._dll.LogiLcdMonoSetBackground(buf))
+        for i in range(MONO_LINE_COUNT):
+            self._dll.LogiLcdMonoSetText(i, "")
         self._dll.LogiLcdUpdate()
         return ok
 
