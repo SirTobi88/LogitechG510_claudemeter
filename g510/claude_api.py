@@ -21,7 +21,11 @@ HEADER_PREFIX = "anthropic-ratelimit-unified-"
 
 
 class AuthError(Exception):
-    """The API rejected the token (401/403); the user must run `claude login`."""
+    """The API rejected the token (401/403). Only a 401 means "expired"."""
+
+    @property
+    def status(self) -> int:
+        return self.args[0] if self.args else 0
 
 
 def credentials_path() -> Path:
@@ -52,8 +56,9 @@ def read_token() -> str | None:
 
 
 def _percent(value: str | None) -> int:
+    # Clamped: at the limit the reported utilization can edge past 1.0.
     try:
-        return round(float(value) * 100)
+        return max(0, min(100, round(float(value) * 100)))
     except (TypeError, ValueError):
         return 0
 
@@ -70,7 +75,9 @@ async def poll_api(token: str) -> dict | None:
 
     Returns a dict with s/sr (5h window %, minutes to reset), w/wr (7d window),
     st (status text) and ok. Returns None for transient problems (network
-    error, 5xx, missing headers). Raises AuthError on 401/403.
+    error, 5xx, missing headers). Raises AuthError on 401/403. A 429 means the
+    limit is used up; it still carries the headers and is reported like any
+    other reading, so the display shows 100% instead of freezing below it.
     """
     request_headers = {
         "Authorization": f"Bearer {token}",
@@ -87,12 +94,12 @@ async def poll_api(token: str) -> dict | None:
 
     if resp.status_code in (401, 403):
         raise AuthError(resp.status_code)
-    if resp.status_code >= 400:
-        return None
 
     def h(name: str) -> str | None:
         return resp.headers.get(HEADER_PREFIX + name)
 
+    if resp.status_code >= 400 and resp.status_code != 429:
+        return None
     if h("5h-utilization") is None:
         return None
     return {
